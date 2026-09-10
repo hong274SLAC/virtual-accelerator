@@ -45,6 +45,7 @@ class ZFELPVModel(LUMEModel):
 
         self._state: dict[str, Any] = {}
         self._variables = {}
+        self._state["model_eval_id"] = 0.0
 
         # ------------------------------------------------------
         # Scalar, real-machine-like undulator controls
@@ -115,6 +116,12 @@ class ZFELPVModel(LUMEModel):
                     unit="dimensionless",
                     read_only=True,
                 ),
+                "model_eval_id": ScalarVariable(
+                    name="model_eval_id",
+                    default_value=0.0,
+                    unit="",
+                    read_only=True,
+                ),
             }
         )
 
@@ -160,6 +167,8 @@ class ZFELPVModel(LUMEModel):
         )
 
         self._sync_from_backend(include_controls=True)
+
+        self._state["model_eval_id"] += 1.0
 
     def _sync_from_backend(
         self,
@@ -257,6 +266,7 @@ def build_cu_hxr_zfel_runner_config(
 
     config["variables"]["pulse_intensity_std_relative"]["pv"] = ("ZFEL:PULSE_INTENSITY_STD_REL")
 
+    config["variables"]["model_eval_id"]["pv"] = ("ZFEL:MODEL_EVAL_ID")
     return config
 
 
