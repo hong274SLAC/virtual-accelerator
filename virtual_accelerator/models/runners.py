@@ -51,7 +51,6 @@ def main():
     )
 
     # Get the appropriate model based on user input
-    runner_kwargs = {}
     if args.model == "cu_hxr_bmad":
         from virtual_accelerator.models.cu_hxr import get_cu_hxr_bmad_model
 
@@ -73,22 +72,15 @@ def main():
             end_element=args.end_element, n_particles=args.n_particles
         )
     elif args.model == "cu_hxr_zfel":
-        from virtual_accelerator.models.cu_hxr_zfel import (
-            get_cu_hxr_zfel_model,
-            build_cu_hxr_zfel_runner_config,
-        )
+        from virtual_accelerator.models.cu_hxr_zfel import get_cu_hxr_zfel_model
 
         model = get_cu_hxr_zfel_model()
-        runner_kwargs["config"] = build_cu_hxr_zfel_runner_config(
-            Runner,
-            model,
-        )
 
     else:
         raise ValueError(f"Invalid model choice. Please choose one of {choices}.")
 
     # Run the model
-    runner = Runner(model=model, **runner_kwargs)
+    runner = Runner(model)
     runner.run()
 
 

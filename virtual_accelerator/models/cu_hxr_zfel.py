@@ -44,6 +44,7 @@ class ZFELPVModel(LUMEModel):
         )
 
         self._state: dict[str, Any] = {}
+        self._pv_aliases = {}
         self._variables = {}
         self._state["model_eval_id"] = 0.0
 
@@ -58,6 +59,12 @@ class ZFELPVModel(LUMEModel):
             self._state[kact_name] = float(kact[index])
             self._state[dskact_name] = float(dskact[index])
 
+            kact_pv = f"USEG:UNDH:{cell}50:KAct"
+            dskact_pv = f"USEG:UNDH:{cell}50:DSKAct"
+
+            self._pv_aliases[kact_pv] = kact_name
+            self._pv_aliases[dskact_pv] = dskact_name
+
             self._variables[kact_name] = ScalarVariable(
                 name=kact_name,
                 default_value=float(kact[index]),
@@ -68,6 +75,22 @@ class ZFELPVModel(LUMEModel):
 
             self._variables[dskact_name] = ScalarVariable(
                 name=dskact_name,
+                default_value=float(dskact[index]),
+                value_range=(0.0, 5.0),
+                unit="dimensionless",
+                read_only=False,
+            )
+
+            self._variables[kact_pv] = ScalarVariable(
+                name=kact_pv,
+                default_value=float(kact[index]),
+                value_range=(0.0, 5.0),
+                unit="dimensionless",
+                read_only=False,
+            )
+
+            self._variables[dskact_pv] = ScalarVariable(
+                name=dskact_pv,
                 default_value=float(dskact[index]),
                 value_range=(0.0, 5.0),
                 unit="dimensionless",
@@ -127,12 +150,75 @@ class ZFELPVModel(LUMEModel):
 
         self._sync_from_backend(include_controls=True)
 
+        self._pv_aliases.update(
+            {
+                "GDET:FEE1:361:ENRC": "pulse_intensity_mean",
+                "GDET:FEE1:361:ENRCHSTCUHBR": "pulse_intensity_p80",
+                "ZFEL:POWER_MAX": "power_max",
+                "ZFEL:EXIT_POWER": "exit_power",
+                "ZFEL:PULSE_ENERGY": "pulse_energy",
+                "ZFEL:PULSE_INTENSITY_STD_REL":
+                    "pulse_intensity_std_relative",
+                "ZFEL:MODEL_EVAL_ID": "model_eval_id",
+            }
+        )
+
+        self._variables.update(
+            {
+                "GDET:FEE1:361:ENRC": ScalarVariable(
+                    name="GDET:FEE1:361:ENRC",
+                    default_value=0.0,
+                    unit="J",
+                    read_only=True,
+                ),
+                "GDET:FEE1:361:ENRCHSTCUHBR": ScalarVariable(
+                    name="GDET:FEE1:361:ENRCHSTCUHBR",
+                    default_value=0.0,
+                    unit="J",
+                    read_only=True,
+                ),
+                "ZFEL:POWER_MAX": ScalarVariable(
+                    name="ZFEL:POWER_MAX",
+                    default_value=0.0,
+                    unit="W",
+                    read_only=True,
+                ),
+                "ZFEL:EXIT_POWER": ScalarVariable(
+                    name="ZFEL:EXIT_POWER",
+                    default_value=0.0,
+                    unit="W",
+                    read_only=True,
+                ),
+                "ZFEL:PULSE_ENERGY": ScalarVariable(
+                    name="ZFEL:PULSE_ENERGY",
+                    default_value=0.0,
+                    unit="J",
+                    read_only=True,
+                ),
+                "ZFEL:PULSE_INTENSITY_STD_REL": ScalarVariable(
+                    name="ZFEL:PULSE_INTENSITY_STD_REL",
+                    default_value=0.0,
+                    unit="dimensionless",
+                    read_only=True,
+                ),
+                "ZFEL:MODEL_EVAL_ID": ScalarVariable(
+                    name="ZFEL:MODEL_EVAL_ID",
+                    default_value=0.0,
+                    unit="",
+                    read_only=True,
+                ),
+            }
+        )
+
     @property
     def supported_variables(self):
         return self._variables
 
-    def _get(self, names: list[str]) -> dict[str, Any]:
-        return {name: self._state[name] for name in names}
+    def _get(self, names):
+        return {
+            name: self._state[self._pv_aliases.get(name, name)]
+            for name in names
+        }
 
     def _set(self, values: dict[str, Any]) -> None:
         """
@@ -147,7 +233,8 @@ class ZFELPVModel(LUMEModel):
             return
 
         for name, value in values.items():
-            self._state[name] = float(value)
+            state_name = self._pv_aliases.get(name, name)
+            self._state[state_name] = float(value)
 
         kact = np.asarray(
             [self._state[f"KAct_{cell}"] for cell in HXR_CELLS],
@@ -225,46 +312,3 @@ def get_cu_hxr_zfel_model() -> ZFELPVModel:
     Construct the CU HXR ZFEL virtual-accelerator model.
     """
     return ZFELPVModel()
-
-
-def build_cu_hxr_zfel_runner_config(
-    runner_cls,
-    model,
-    *,
-    protocols: tuple[str, ...] = ("ca", "pva"),
-    update_rate: float = 0.5,
-):
-    """
-    Build the lume-pva Runner configuration for the CU HXR ZFEL model.
-    """
-
-    config = runner_cls.generate_config(
-        model=model,
-        prefix="",
-    )
-
-    # PV names below already include the requested prefix.
-    config["prefix"] = ""
-    config["protocol"] = list(protocols)
-    config["update_rate"] = update_rate
-
-
-    for cell in HXR_CELLS:
-        config["variables"][f"KAct_{cell}"]["pv"] = f"USEG:UNDH:{cell}50:KAct"
-
-        config["variables"][f"DSKAct_{cell}"]["pv"] = f"USEG:UNDH:{cell}50:DSKAct"
-
-    config["variables"]["power_max"]["pv"] = "ZFEL:POWER_MAX"
-
-    config["variables"]["exit_power"]["pv"] = "ZFEL:EXIT_POWER"
-
-    config["variables"]["pulse_energy"]["pv"] = "ZFEL:PULSE_ENERGY"
-
-    config["variables"]["pulse_intensity_mean"]["pv"] = "GDET:FEE1:361:ENRC"
-
-    config["variables"]["pulse_intensity_p80"]["pv"] = "GDET:FEE1:361:ENRCHSTCUHBR"
-
-    config["variables"]["pulse_intensity_std_relative"]["pv"] = ("ZFEL:PULSE_INTENSITY_STD_REL")
-
-    config["variables"]["model_eval_id"]["pv"] = ("ZFEL:MODEL_EVAL_ID")
-    return config
