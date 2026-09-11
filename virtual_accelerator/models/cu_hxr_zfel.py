@@ -268,28 +268,3 @@ def build_cu_hxr_zfel_runner_config(
 
     config["variables"]["model_eval_id"]["pv"] = ("ZFEL:MODEL_EVAL_ID")
     return config
-
-
-def get_cu_hxr_zfel_runner(
-    runner_cls,
-    *,
-    protocols: tuple[str, ...] = ("ca", "pva"),
-    update_rate: float = 0.5,
-):
-    """
-    Construct a lume-pva Runner for the CU HXR ZFEL virtual accelerator.
-    """
-
-    model = get_cu_hxr_zfel_model()
-
-    config = build_cu_hxr_zfel_runner_config(
-        runner_cls,
-        model,
-        protocols=protocols,
-        update_rate=update_rate,
-    )
-
-    return runner_cls(
-        model=model,
-        config=config,
-    )
